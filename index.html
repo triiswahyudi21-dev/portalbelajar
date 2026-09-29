@@ -635,7 +635,7 @@ Globalisasi adalah proses mendunia yang menghilangkan sekat geografis antar nega
       const [selectedMaterial, setSelectedMaterial] = useState(null);
       const [notification, setNotification] = useState(null);
 
-      // Form Login Guru State
+      // Form Login Guru State (Diisi kosong tanpa default)
       const [loginGuruName, setLoginGuruName] = useState('');
       const [loginGuruPass, setLoginGuruPass] = useState('');
 
@@ -824,7 +824,7 @@ Globalisasi adalah proses mendunia yang menghilangkan sekat geografis antar nega
       const handleGuruLogin = (e) => {
         e.preventDefault();
         if (loginGuruPass !== 'guru123') {
-          showNotification("Password Guru Salah! Gunakan: guru123");
+          showNotification("Password Guru Salah!");
           return;
         }
 
@@ -980,6 +980,20 @@ Globalisasi adalah proses mendunia yang menghilangkan sekat geografis antar nega
         } catch (e) {}
 
         showNotification("Soal berhasil dihapus.");
+      };
+
+      // Hapus Rekap Nilai Siswa dari Firestore & LocalStorage
+      const handleDeleteScore = async (scoreId) => {
+        if (!window.confirm("Apakah Anda yakin ingin menghapus data nilai ini?")) return;
+
+        setScores(prev => prev.filter(s => s.id !== scoreId));
+
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'scores', scoreId);
+          await deleteDoc(docRef);
+        } catch (e) {}
+
+        showNotification("Data nilai berhasil dihapus.");
       };
 
       // Upload Siswa Batch ke Cloud Database (Firestore)
@@ -1201,7 +1215,7 @@ Globalisasi adalah proses mendunia yang menghilangkan sekat geografis antar nega
                   <label className="block text-xs font-semibold text-slate-400 mb-1.5">Nama Pengajar / NIP</label>
                   <input 
                     type="text"
-                    placeholder="Masukkan Nama/NIP Guru (Contoh: Dra. Hj. Siti Rahmah)"
+                    placeholder="Masukkan Nama/NIP Guru"
                     value={loginGuruName}
                     onChange={(e) => setLoginGuruName(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 text-xs focus:border-blue-500 outline-none"
@@ -1212,7 +1226,7 @@ Globalisasi adalah proses mendunia yang menghilangkan sekat geografis antar nega
                   <label className="block text-xs font-semibold text-slate-400 mb-1.5">Password Otentikasi Guru</label>
                   <input 
                     type="password"
-                    placeholder="Password Default: guru123"
+                    placeholder="Masukkan Password"
                     value={loginGuruPass}
                     onChange={(e) => setLoginGuruPass(e.target.value)}
                     required
@@ -1772,6 +1786,7 @@ Globalisasi adalah proses mendunia yang menghilangkan sekat geografis antar nega
                       <th className="p-4">Kelas & Rombel</th>
                       <th className="p-4">Materi IPS</th>
                       <th className="p-4 text-center">Nilai Akhir</th>
+                      <th className="p-4 text-center">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800 text-slate-300">
@@ -1788,10 +1803,19 @@ Globalisasi adalah proses mendunia yang menghilangkan sekat geografis antar nega
                             {s.score} / 100
                           </span>
                         </td>
+                        <td className="p-4 text-center">
+                          <button 
+                            onClick={() => handleDeleteScore(s.id)} 
+                            className="px-2.5 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 rounded-lg font-bold transition-all inline-flex items-center gap-1 text-[11px]"
+                            title="Hapus Nilai"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Hapus
+                          </button>
+                        </td>
                       </tr>
                     ))}
                     {filteredScores.length === 0 && (
-                      <tr><td colSpan="5" className="p-8 text-center text-slate-500 italic">Belum ada data nilai kuis untuk filter kelas ini.</td></tr>
+                      <tr><td colSpan="6" className="p-8 text-center text-slate-500 italic">Belum ada data nilai kuis untuk filter kelas ini.</td></tr>
                     )}
                   </tbody>
                 </table>
