@@ -176,6 +176,11 @@ Globalisasi adalah proses mendunia yang menghilangkan sekat geografis antar nega
       const [timer, setTimer] = useState(0);
       const [isReading, setIsReading] = useState(false);
 
+      // State Pengerjaan Latihan Soal
+      const [activeQuizMaterial, setActiveQuizMaterial] = useState(null);
+      const [userAnswers, setUserAnswers] = useState({});
+      const [quizResult, setQuizResult] = useState(null);
+
       // Load data dari Cloud Firestore
       useEffect(() => {
         signInAnonymously(auth).catch(() => {});
@@ -267,6 +272,49 @@ Globalisasi adalah proses mendunia yang menghilangkan sekat geografis antar nega
         setIsReading(true);
       };
 
+      // Handler Submit Kuis Latihan Soal
+      const handleSubmitQuiz = async (e) => {
+        e.preventDefault();
+        const currentQuestions = questions.filter(q => q.materialId === activeQuizMaterial.id);
+        if (currentQuestions.length === 0) return;
+
+        let correctCount = 0;
+        currentQuestions.forEach(q => {
+          const ans = (userAnswers[q.id] || '').trim().toLowerCase();
+          const target = (q.correctAnswer || '').trim().toLowerCase();
+          if (ans === target) {
+            correctCount++;
+          }
+        });
+
+        const calculatedScore = Math.round((correctCount / currentQuestions.length) * 100);
+        
+        const scoreData = {
+          id: `sc_${Date.now()}_${studentSession.id}`,
+          studentId: studentSession.id,
+          studentName: studentSession.name,
+          kelas: studentSession.kelas,
+          subKelas: studentSession.subKelas,
+          materialId: activeQuizMaterial.id,
+          materialTitle: activeQuizMaterial.title,
+          score: calculatedScore,
+          totalQuestions: currentQuestions.length,
+          correctAnswers: correctCount,
+          submittedAt: Date.now()
+        };
+
+        // Simpan ke Firestore dan LocalStorage
+        try {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'scores', scoreData.id);
+          await setDoc(docRef, scoreData);
+        } catch (e) {}
+
+        const localScores = JSON.parse(localStorage.getItem('elearning_scores_v3') || '[]');
+        localStorage.setItem('elearning_scores_v3', JSON.stringify([scoreData, ...localScores]));
+
+        setQuizResult(scoreData);
+      };
+
       if (!studentSession) {
         return (
           <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center p-4">
@@ -345,7 +393,95 @@ Globalisasi adalah proses mendunia yang menghilangkan sekat geografis antar nega
             </button>
           </header>
 
-          {activeMaterial ? (
+          {/* DUKUNGAN PENUH LAYAR LATIHAN SOAL / KUIS */}
+          {activeQuizMaterial ? (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
+              <button 
+                onClick={() => { setActiveQuizMaterial(null); setUserAnswers({}); setQuizResult(null); }} 
+                className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
+              >
+                <ArrowLeft className="w-4 h-4"/> Kembali ke Daftar Materi
+              </button>
+
+              <div className="border-b border-slate-800 pb-4">
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-lg font-bold">
+                  Latihan Soal & Evaluasi
+                </span>
+                <h1 className="text-lg font-bold text-white mt-2">{activeQuizMaterial.title}</h1>
+              </div>
+
+              {quizResult ? (
+                <div className="text-center p-8 bg-slate-950 border border-slate-800 rounded-2xl space-y-4">
+                  <Award className="w-16 h-16 text-amber-400 mx-auto" />
+                  <h3 className="text-xl font-bold text-white">Hasil Latihan Soal</h3>
+                  <div className="text-4xl font-extrabold text-blue-400">{quizResult.score} / 100</div>
+                  <p className="text-xs text-slate-400">
+                    Jawaban Benar: {quizResult.correctAnswers} dari {quizResult.totalQuestions} Soal
+                  </p>
+                  <button 
+                    onClick={() => { setActiveQuizMaterial(null); setUserAnswers({}); setQuizResult(null); }}
+                    className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-all mt-4"
+                  >
+                    Selesai & Kembali
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmitQuiz} className="space-y-6">
+                  {questions.filter(q => q.materialId === activeQuizMaterial.id).map((q, idx) => (
+                    <div key={q.id} className="bg-slate-950 border border-slate-800 p-4 sm:p-5 rounded-2xl space-y-3">
+                      <p className="font-bold text-white text-xs leading-relaxed">
+                        {idx + 1}. {q.questionText}
+                      </p>
+
+                      {q.type === 'pg' ? (
+                        <div className="space-y-2">
+                          {['A', 'B', 'C', 'D'].map((optKey) => {
+                            const optText = q[`option${optKey}`];
+                            if (!optText) return null;
+                            return (
+                              <label key={optKey} className={`flex items-center gap-3 p-3 rounded-xl border text-xs cursor-pointer transition-all ${userAnswers[q.id] === optKey ? 'bg-blue-600/20 border-blue-500 text-white' : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'}`}>
+                                <input 
+                                  type="radio" 
+                                  name={`q_${q.id}`} 
+                                  value={optKey} 
+                                  checked={userAnswers[q.id] === optKey}
+                                  onChange={() => setUserAnswers(prev => ({ ...prev, [q.id]: optKey }))}
+                                  className="accent-blue-500"
+                                  required
+                                />
+                                <span><strong className="text-blue-400">{optKey}.</strong> {optText}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div>
+                          <input 
+                            type="text" 
+                            required
+                            placeholder="Tuliskan jawaban singkat Anda di sini..."
+                            value={userAnswers[q.id] || ''}
+                            onChange={(e) => setUserAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                            className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 text-xs text-white focus:border-blue-500 outline-none"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {questions.filter(q => q.materialId === activeQuizMaterial.id).length === 0 ? (
+                    <div className="p-8 text-center text-slate-500 bg-slate-950 rounded-2xl border border-slate-800 text-xs">
+                      Belum ada soal latihan yang dibuat oleh guru untuk materi ini.
+                    </div>
+                  ) : (
+                    <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl transition-all text-xs shadow-lg shadow-emerald-600/30">
+                      Kirim Jawaban & Lihat Nilai
+                    </button>
+                  )}
+                </form>
+              )}
+            </div>
+          ) : activeMaterial ? (
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
               <button onClick={() => { setIsReading(false); setActiveMaterial(null); }} className="text-xs text-slate-400 hover:text-white flex items-center gap-1 mb-2">
                 <ArrowLeft className="w-4 h-4"/> Kembali ke Daftar Materi
@@ -370,28 +506,40 @@ Globalisasi adalah proses mendunia yang menghilangkan sekat geografis antar nega
           ) : (
             <div className="space-y-4">
               <h3 className="font-bold text-white text-sm flex items-center gap-2">
-                <BookOpen className="w-4 h-4 text-blue-500"/> Materi Pembelajaran Tersedia
+                <BookOpen className="w-4 h-4 text-blue-500"/> Materi Pembelajaran & Latihan Soal
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {availableMaterials.map(m => (
-                  <div key={m.id} className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between">
-                    <div>
-                      <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-lg font-bold">
-                        Kelas {m.kelas}
-                      </span>
-                      <h4 className="font-bold text-white text-sm mt-2">{m.title}</h4>
-                      <p className="text-slate-400 text-xs line-clamp-2 mt-1">{m.content}</p>
-                    </div>
+                {availableMaterials.map(m => {
+                  const qCount = questions.filter(q => q.materialId === m.id).length;
+                  return (
+                    <div key={m.id} className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between">
+                      <div>
+                        <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-lg font-bold">
+                          Kelas {m.kelas}
+                        </span>
+                        <h4 className="font-bold text-white text-sm mt-2">{m.title}</h4>
+                        <p className="text-slate-400 text-xs line-clamp-2 mt-1">{m.content}</p>
+                      </div>
 
-                    <button 
-                      onClick={() => startReading(m)} 
-                      className="mt-4 w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded-xl text-xs transition-all flex justify-center items-center gap-2"
-                    >
-                      Buka & Pelajari Materi
-                    </button>
-                  </div>
-                ))}
+                      <div className="mt-4 space-y-2">
+                        <button 
+                          onClick={() => startReading(m)} 
+                          className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded-xl text-xs transition-all flex justify-center items-center gap-2"
+                        >
+                          <BookOpen className="w-3.5 h-3.5"/> Pelajari Materi
+                        </button>
+                        
+                        <button 
+                          onClick={() => setActiveQuizMaterial(m)} 
+                          className="w-full bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 font-bold py-2 rounded-xl text-xs transition-all flex justify-center items-center gap-2"
+                        >
+                          <List className="w-3.5 h-3.5"/> Kerjakan Latihan Soal ({qCount})
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
 
                 {availableMaterials.length === 0 && (
                   <div className="col-span-full p-8 text-center text-slate-500 bg-slate-900/50 rounded-2xl border border-slate-800 text-xs">
@@ -597,11 +745,20 @@ Globalisasi adalah proses mendunia yang menghilangkan sekat geografis antar nega
             }
           }, (err) => console.log("Gagal membaca siswa dari cloud"));
 
+          // Listener Firestore untuk Skor/Nilai Realtime dari Portal Siswa
+          const scoresCol = collection(db, 'artifacts', appId, 'public', 'data', 'scores');
+          const unsubScores = onSnapshot(scoresCol, (snapshot) => {
+            const remoteScores = [];
+            snapshot.docs.forEach(doc => remoteScores.push(doc.data()));
+            if (remoteScores.length > 0) setScores(remoteScores);
+          }, (err) => console.log("Offline mode active (scores)"));
+
           return () => {
             unsubMat();
             unsubQ();
             unsubPresence();
             unsubStudents();
+            unsubScores();
           };
         } catch (err) {}
       }, []);
